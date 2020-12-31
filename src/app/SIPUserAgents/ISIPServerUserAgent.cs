@@ -29,21 +29,19 @@ namespace SIPSorcery.SIP.App
         SIPCallDirection CallDirection { get; }
         SIPDialogue SIPDialogue { get; }
         UASInviteTransaction ClientTransaction { get; }
-        SIPAccount SIPAccount { get; set; }
+        ISIPAccount SIPAccount { get; set; }
         bool IsAuthenticated { get; set; }
         bool IsB2B { get; }
         bool IsInvite { get; }                      // Set to true for server user agents that are handling an INVITE request.
         SIPRequest CallRequest { get; }
         string CallDestination { get; }
         bool IsUASAnswered { get; }
-        string Owner { get; }
 
         event SIPUASDelegate CallCancelled;
         event SIPUASDelegate NoRingTimeout;
         event SIPUASDelegate TransactionComplete;
-        event SIPUASStateChangedDelegate UASStateChanged;
+        //event SIPUASStateChangedDelegate UASStateChanged;
 
-        bool LoadSIPAccountForIncomingCall();
         bool AuthenticateCall();
         void Progress(SIPResponseStatusCodesEnum progressStatus, string reasonPhrase, string[] customHeaders, string progressContentType, string progressBody);
         SIPDialogue Answer(string contentType, string body, SIPDialogueTransferModesEnum transferMode);
@@ -55,9 +53,6 @@ namespace SIPSorcery.SIP.App
         void Redirect(SIPResponseStatusCodesEnum redirectCode, SIPURI redirectURI);
         void Redirect(SIPResponseStatusCodesEnum redirectCode, SIPURI redirectURI, string[] customHeaders);
         void NoCDR();
-        void SetTraceDelegate(SIPTransactionTraceMessageDelegate traceDelegate);
-        void SetOwner(string owner, string adminMemberId);
         void AnswerNonInvite(SIPResponseStatusCodesEnum answerStatus, string reasonPhrase, string[] customHeaders, string contentType, string body);
-        void SetDialPlanContextID(Guid dialPlanContextID);
     }
 }
