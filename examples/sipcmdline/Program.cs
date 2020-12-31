@@ -66,13 +66,15 @@ using System.Threading.Tasks;
 using CommandLine;
 using CommandLine.Text;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Serilog;
+using Serilog.Extensions.Logging;
 using Serilog.Sinks.SystemConsole.Themes;
 using SIPSorcery.Media;
-using SIPSorcery.Net;
 using SIPSorcery.SIP;
 using SIPSorcery.SIP.App;
 using SIPSorcery.Sys;
+using SIPSorceryMedia.Abstractions.V1;
 
 namespace SIPSorcery
 {
@@ -80,7 +82,7 @@ namespace SIPSorcery
     {
         private const int DEFAULT_RESPONSE_TIMEOUT_SECONDS = 5;
 
-        private static Microsoft.Extensions.Logging.ILogger logger;
+        private static Microsoft.Extensions.Logging.ILogger logger = NullLogger.Instance;
 
         public enum Scenarios
         {
@@ -126,15 +128,14 @@ namespace SIPSorcery
 
         static void Main(string[] args)
         {
-            var loggerFactory = new Microsoft.Extensions.Logging.LoggerFactory();
-            var loggerConfig = new LoggerConfiguration()
-                //.Enrich.FromLogContext()
+            var seriLogger = new LoggerConfiguration()
+                .Enrich.FromLogContext()
                 .MinimumLevel.Is(Serilog.Events.LogEventLevel.Debug)
                 .WriteTo.Console(theme: AnsiConsoleTheme.Code)
                 .CreateLogger();
-            loggerFactory.AddSerilog(loggerConfig);
-            SIPSorcery.Sys.Log.LoggerFactory = loggerFactory;
-            logger = SIPSorcery.Sys.Log.Logger;
+            var factory = new SerilogLoggerFactory(seriLogger);
+            SIPSorcery.LogFactory.Set(factory);
+            logger = factory.CreateLogger<Program>();
 
             var result = Parser.Default.ParseArguments<Options>(args)
                 .WithParsed<Options>(opts => RunCommand(opts).Wait());
@@ -391,9 +392,11 @@ namespace SIPSorcery
                 ua.ClientCallAnswered += (uac, resp) => logger.LogInformation($"{uac.CallDescriptor.To} Answered: {resp.StatusCode} {resp.ReasonPhrase}.");
 
                 var audioOptions = new AudioSourceOptions { AudioSource = AudioSourcesEnum.Silence };
-                var rtpAudioSession = new RtpAudioSession(audioOptions, new List<SDPMediaFormatsEnum> { SDPMediaFormatsEnum.PCMU });
+                var audioExtrasSource = new AudioExtrasSource(new AudioEncoder(), audioOptions);
+                audioExtrasSource.RestrictFormats(format => format.Codec == AudioCodecsEnum.PCMU);
+                var voipMediaSession = new VoIPMediaSession(new MediaEndPoints { AudioSource = audioExtrasSource });
 
-                var result = await ua.Call(dst.ToString(), null, null, rtpAudioSession);
+                var result = await ua.Call(dst.ToString(), null, null, voipMediaSession);
 
                 ua.Hangup();
 

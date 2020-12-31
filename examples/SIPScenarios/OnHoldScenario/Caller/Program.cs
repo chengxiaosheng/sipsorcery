@@ -15,12 +15,13 @@
 //-----------------------------------------------------------------------------
 
 using System;
-using System.Collections.Generic;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Serilog;
+using Serilog.Extensions.Logging;
 using SIPSorcery.Media;
 using SIPSorcery.Net;
 using SIPSorcery.SIP;
@@ -36,7 +37,7 @@ namespace SIPSorcery
 
         private static SIPTransport _sipTransport;
 
-        private static Microsoft.Extensions.Logging.ILogger Log = SIPSorcery.Sys.Log.Logger;
+        private static Microsoft.Extensions.Logging.ILogger Log = NullLogger.Instance;
 
         private static SIPUserAgent _ua;
         private static int _rtpPort = RTP_PORT_START;
@@ -185,11 +186,9 @@ namespace SIPSorcery
         /// <param name="dst">THe destination specified on an incoming call. Can be used to
         /// set the audio source.</param>
         /// <returns>A new RTP session object.</returns>
-        private static RtpAudioSession CreateRtpSession()
+        private static AudioSendOnlyMediaSession CreateRtpSession()
         {
-            List<SDPMediaFormatsEnum> codecs = new List<SDPMediaFormatsEnum> { SDPMediaFormatsEnum.PCMU, SDPMediaFormatsEnum.PCMA, SDPMediaFormatsEnum.G722 };
-            var audioOptions = new AudioSourceOptions { AudioSource = AudioSourcesEnum.Silence };
-            var rtpAudioSession = new RtpAudioSession(audioOptions, codecs, null, _rtpPort);
+            var rtpAudioSession = new AudioSendOnlyMediaSession(null, _rtpPort);
             _rtpPort += 2;
 
             // Wire up the event handler for RTP packets received from the remote party.
@@ -263,18 +262,18 @@ namespace SIPSorcery
         }
 
         /// <summary>
-        ///  Adds a console logger. Can be omitted if internal SIPSorcery debug and warning messages are not required.
+        /// Adds a console logger. Can be omitted if internal SIPSorcery debug and warning messages are not required.
         /// </summary>
         private static void AddConsoleLogger()
         {
-            var loggerFactory = new Microsoft.Extensions.Logging.LoggerFactory();
-            var loggerConfig = new LoggerConfiguration()
+            var logger = new LoggerConfiguration()
                 .Enrich.FromLogContext()
                 .MinimumLevel.Is(Serilog.Events.LogEventLevel.Debug)
                 .WriteTo.Console()
                 .CreateLogger();
-            loggerFactory.AddSerilog(loggerConfig);
-            SIPSorcery.Sys.Log.LoggerFactory = loggerFactory;
+            var factory = new SerilogLoggerFactory(logger);
+            SIPSorcery.LogFactory.Set(factory);
+            Log = factory.CreateLogger<Program>();
         }
 
         /// <summary>

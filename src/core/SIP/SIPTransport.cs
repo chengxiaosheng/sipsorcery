@@ -125,6 +125,42 @@ namespace SIPSorcery.SIP
         public string ContactHost;
 
         /// <summary>
+        /// Warning: Do not set this property unless there is a specific problem with a remote
+        /// SIP User Agent accepting SIP retransmits. The effect of setting this property is
+        /// to only send each request and response for a transaction once, i.e. retransmits
+        /// timers firing will not cause additional sending of the requests or responses to be
+        /// put on the wire. SIP transaction processing will still occur as normal with the 
+        /// execption of not sending the retransmitted messages. It's also only likely to
+        /// be useful for cases where reliable transports, such as TCP and TLS, are being used,
+        /// since they are the ones where retransmits have been observed to be misidentified.
+        /// </summary>
+        /// <remarks>
+        /// For additional context see https://lists.cs.columbia.edu/pipermail/sip-implementors/2013-January/028817.html
+        /// and https://github.com/sipsorcery/sipsorcery/issues/370#issuecomment-739495726.
+        /// </remarks>
+        public bool DisableRetransmitSending
+        {
+            get
+            {
+                if (m_transactionEngine != null)
+                {
+                    return m_transactionEngine.DisableRetransmitSending;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            set
+            {
+                if(m_transactionEngine != null)
+                {
+                    m_transactionEngine.DisableRetransmitSending = value;
+                }
+            }
+        }
+
+        /// <summary>
         /// Creates a SIP transport class with default DNS resolver and SIP transaction engine.
         /// </summary>
         public SIPTransport()
@@ -197,7 +233,7 @@ namespace SIPSorcery.SIP
             catch (Exception excp)
             {
                 logger.LogError("Exception AddSIPChannel. " + excp.Message);
-                throw excp;
+                throw;
             }
         }
 
@@ -281,7 +317,7 @@ namespace SIPSorcery.SIP
             catch (Exception excp)
             {
                 logger.LogError("Exception SIPTransport ReceiveMessage. " + excp.Message);
-                throw excp;
+                throw;
             }
         }
 
@@ -522,17 +558,17 @@ namespace SIPSorcery.SIP
                 return Task.FromResult(SocketError.Success);
             }
 
-            sipRequest.Header.ContentLength = (sipRequest.Body.NotNullOrBlank()) ? Encoding.UTF8.GetByteCount(sipRequest.Body) : 0;
+            sipRequest.Header.ContentLength = (sipRequest.BodyBuffer != null) ? sipRequest.BodyBuffer.Length : 0;
 
             SIPRequestOutTraceEvent?.Invoke(sendFromSIPEndPoint, dstEndPoint, sipRequest);
 
             if (sipChannel.IsSecure)
             {
-                return sipChannel.SendSecureAsync(dstEndPoint, Encoding.UTF8.GetBytes(sipRequest.ToString()), sipRequest.URI.Host, sipRequest.SendFromHintConnectionID);
+                return sipChannel.SendSecureAsync(dstEndPoint, sipRequest.GetBytes(), sipRequest.URI.HostAddress, sipRequest.SendFromHintConnectionID);
             }
             else
             {
-                return sipChannel.SendAsync(dstEndPoint, Encoding.UTF8.GetBytes(sipRequest.ToString()), sipRequest.SendFromHintConnectionID);
+                return sipChannel.SendAsync(dstEndPoint, sipRequest.GetBytes(), sipRequest.SendFromHintConnectionID);
             }
         }
 
@@ -549,7 +585,11 @@ namespace SIPSorcery.SIP
                 throw new ArgumentNullException("sipTransaction", "The SIP transaction parameter must be set for SendTransaction.");
             }
 
-            if (!m_transactionEngine.Exists(sipTransaction.TransactionId))
+            if(m_transactionEngine == null)
+            {
+                logger.LogWarning("SIP transport was requested to send a transaction in stateless mode (noop).");
+            }
+            else if (!m_transactionEngine.Exists(sipTransaction.TransactionId))
             {
                 m_transactionEngine.AddTransaction(sipTransaction);
             }
@@ -685,12 +725,12 @@ namespace SIPSorcery.SIP
                 // Once the channel has been determined check some specific header fields and replace the placeholder end point.
                 AdjustHeadersForEndPoint(sendFromSIPEndPoint, ref sipResponse.Header);
 
-                sipResponse.Header.ContentLength = (sipResponse.Body.NotNullOrBlank()) ? Encoding.UTF8.GetByteCount(sipResponse.Body) : 0;
+                sipResponse.Header.ContentLength = (sipResponse.BodyBuffer != null) ? sipResponse.BodyBuffer.Length : 0;
 
                 SIPResponseOutTraceEvent?.Invoke(sendFromSIPEndPoint, dstEndPoint, sipResponse);
 
                 // Now have a destination and sending channel, go ahead and forward.
-                return sendFromChannel.SendAsync(dstEndPoint, Encoding.UTF8.GetBytes(sipResponse.ToString()), sipResponse.SendFromHintConnectionID);
+                return sendFromChannel.SendAsync(dstEndPoint, sipResponse.GetBytes(), sipResponse.SendFromHintConnectionID);
             }
         }
 
@@ -1134,7 +1174,14 @@ namespace SIPSorcery.SIP
         /// <param name="transaction">The transaction to add.</param>
         public void AddTransaction(SIPTransaction transaction)
         {
-            m_transactionEngine.AddTransaction(transaction);
+            if (m_transactionEngine == null)
+            {
+                logger.LogWarning("The SIP transport was requested to add a transaction in stateless mode (noop).");
+            }
+            else
+            {
+                m_transactionEngine.AddTransaction(transaction);
+            }
         }
 
         /// <summary>

@@ -2,9 +2,12 @@
 // Filename: SIPRequestAuthenticator.cs
 //
 // Description: Central location to handle SIP Request authorisation.
-// 
+//
+// Author(s):
+// Aaron Clauson (aaron@sipsorcery.com)
+//
 // History:
-// 08 Mar 2009	Aaron Clauson   Created (aaron@sipsorcery.com), SIP Sorcery PTY LTD, Hobart, Australia (www.sipsorcery.com).
+// 08 Mar 2009	Aaron Clauson   Created Hobart, Australia.
 //
 // License: 
 // BSD 3-Clause "New" or "Revised" License, see included LICENSE.md file.
@@ -30,7 +33,11 @@ namespace SIPSorcery.SIP.App
         /// <summary>
         /// Authenticates a SIP request.
         /// </summary>
-        public static SIPRequestAuthenticationResult AuthenticateSIPRequest(SIPEndPoint localSIPEndPoint, SIPEndPoint remoteEndPoint, SIPRequest sipRequest, SIPAccount sipAccount, SIPMonitorLogDelegate logSIPMonitorEvent)
+        public static SIPRequestAuthenticationResult AuthenticateSIPRequest(
+            SIPEndPoint localSIPEndPoint, 
+            SIPEndPoint remoteEndPoint, 
+            SIPRequest sipRequest, 
+            ISIPAccount sipAccount)
         {
             try
             {
@@ -40,10 +47,8 @@ namespace SIPSorcery.SIP.App
                 }
                 else if (sipAccount.IsDisabled)
                 {
-                    if (logSIPMonitorEvent != null)
-                    {
-                        logSIPMonitorEvent(new SIPMonitorConsoleEvent(SIPMonitorServerTypesEnum.Authoriser, SIPMonitorEventTypesEnum.DialPlan, "SIP account " + sipAccount.SIPUsername + "@" + sipAccount.SIPDomain + " is disabled for " + sipRequest.Method + ".", sipAccount.Owner));
-                    }
+                    logger.LogWarning("SIP account " + sipAccount.SIPUsername + "@" + sipAccount.SIPDomain + " is disabled for " + sipRequest.Method + ".");
+
                     return new SIPRequestAuthenticationResult(SIPResponseStatusCodesEnum.Forbidden, null);
                 }
                 else
@@ -85,10 +90,8 @@ namespace SIPSorcery.SIP.App
                         // Check for stale nonces.
                         if (IsNonceStale(requestNonce))
                         {
-                            if (logSIPMonitorEvent != null)
-                            {
-                                logSIPMonitorEvent(new SIPMonitorConsoleEvent(SIPMonitorServerTypesEnum.Authoriser, SIPMonitorEventTypesEnum.Warn, "Authentication failed stale nonce for realm=" + sipAccount.SIPDomain + ", username=" + sipAccount.SIPUsername + ", uri=" + uri + ", nonce=" + requestNonce + ", method=" + sipRequest.Method + ".", null));
-                            }
+                            logger.LogWarning("Authentication failed stale nonce for realm=" + sipAccount.SIPDomain + ", username=" + sipAccount.SIPUsername + ", uri=" + uri + ", nonce=" + requestNonce + ", method=" + sipRequest.Method + ".");
+
                             SIPAuthenticationHeader authHeader = new SIPAuthenticationHeader(SIPAuthorisationHeadersEnum.WWWAuthenticate, sipAccount.SIPDomain, GetNonce());
                             return new SIPRequestAuthenticationResult(SIPResponseStatusCodesEnum.Unauthorised, authHeader);
                         }
@@ -105,10 +108,8 @@ namespace SIPSorcery.SIP.App
                             }
                             else
                             {
-                                if (logSIPMonitorEvent != null)
-                                {
-                                    logSIPMonitorEvent(new SIPMonitorConsoleEvent(SIPMonitorServerTypesEnum.Authoriser, SIPMonitorEventTypesEnum.Warn, "Authentication token check failed for realm=" + sipAccount.SIPDomain + ", username=" + sipAccount.SIPUsername + ", uri=" + uri + ", nonce=" + requestNonce + ", method=" + sipRequest.Method + ".", sipAccount.Owner));
-                                }
+                                logger.LogWarning("Authentication token check failed for realm=" + sipAccount.SIPDomain + ", username=" + sipAccount.SIPUsername + ", uri=" + uri + ", nonce=" + requestNonce + ", method=" + sipRequest.Method + ".");
+                                
                                 SIPAuthenticationHeader authHeader = new SIPAuthenticationHeader(SIPAuthorisationHeadersEnum.WWWAuthenticate, sipAccount.SIPDomain, GetNonce());
                                 return new SIPRequestAuthenticationResult(SIPResponseStatusCodesEnum.Unauthorised, authHeader);
                             }
@@ -118,10 +119,7 @@ namespace SIPSorcery.SIP.App
             }
             catch (Exception excp)
             {
-                if (logSIPMonitorEvent != null)
-                {
-                    logSIPMonitorEvent(new SIPMonitorConsoleEvent(SIPMonitorServerTypesEnum.Authoriser, SIPMonitorEventTypesEnum.Error, "Exception AuthoriseSIPRequest. " + excp.Message, null));
-                }
+                logger.LogError(0, excp, "Exception AuthoriseSIPRequest. " + excp.Message);
                 return new SIPRequestAuthenticationResult(SIPResponseStatusCodesEnum.InternalServerError, null);
             }
         }
