@@ -1,4 +1,4 @@
-//-----------------------------------------------------------------------------
+  //-----------------------------------------------------------------------------
 // Filename: SIPServerUserAgent.cs
 //
 // Description: Implementation of a SIP Server User Agent that can be used to receive SIP calls.
@@ -31,33 +31,24 @@ namespace SIPSorcery.SIP.App
     {
         private static ILogger logger = Log.Logger;
 
-        private SIPTransport m_sipTransport;
-        private UASInviteTransaction m_uasTransaction;
-        private SIPEndPoint m_outboundProxy;                   // If the system needs to use an outbound proxy for every request this will be set and overrides any user supplied values.
-        private bool m_isAuthenticated;
-        private bool m_isCancelled;
-        private bool m_isHungup;
-        private string m_sipUsername;
-        private string m_sipDomain;
-        private SIPDialogueTransferModesEnum m_transferMode;
+        protected SIPTransport m_sipTransport;
+        protected UASInviteTransaction m_uasTransaction;
+        protected SIPEndPoint m_outboundProxy;                   // If the system needs to use an outbound proxy for every request this will be set and overrides any user supplied values.
+        protected bool m_isAuthenticated;
+        protected bool m_isCancelled;
+        protected bool m_isHungup;
+        protected SIPDialogueTransferModesEnum m_transferMode;
 
-        public bool IsB2B { get { return false; } }
-        public bool IsInvite
-        {
-            get { return true; }
-        }
-
-        /// <summary>
-        /// Call direction for this user agent.
-        /// </summary>
-        public SIPCallDirection CallDirection { get; private set; } = SIPCallDirection.In;
+        public bool IsB2B { get; protected set; } = false;
+        public bool IsInvite => true;
+        public SIPCallDirection CallDirection => SIPCallDirection.In;
 
         /// <summary>
         /// The SIP dialog that's created if we're able to successfully answer the call request.
         /// </summary>
         public SIPDialogue SIPDialogue { get; private set; }
 
-        private ISIPAccount m_sipAccount;
+        protected ISIPAccount m_sipAccount;
         public ISIPAccount SIPAccount
         {
             get { return m_sipAccount; }
@@ -70,35 +61,12 @@ namespace SIPSorcery.SIP.App
             set { m_isAuthenticated = value; }
         }
 
-        public bool IsCancelled
-        {
-            get { return m_isCancelled; }
-        }
-
-        public SIPRequest CallRequest
-        {
-            get { return m_uasTransaction.TransactionRequest; }
-        }
-
-        public string CallDestination
-        {
-            get { return m_uasTransaction.TransactionRequest.URI.User; }
-        }
-
-        public bool IsUASAnswered
-        {
-            get { return m_uasTransaction != null && m_uasTransaction.TransactionFinalResponse != null; }
-        }
-
-        public bool IsHungup
-        {
-            get { return m_isHungup; }
-        }
-
-        public UASInviteTransaction ClientTransaction
-        {
-            get { return m_uasTransaction; }
-        }
+        public bool IsCancelled => m_isCancelled;
+        public SIPRequest CallRequest => m_uasTransaction.TransactionRequest;
+        public string CallDestination => m_uasTransaction.TransactionRequest.URI.User;
+        public bool IsUASAnswered => m_uasTransaction != null && m_uasTransaction.TransactionFinalResponse != null;
+        public bool IsHungup => m_isHungup;
+        public UASInviteTransaction ClientTransaction => m_uasTransaction;
 
         /// <summary>
         /// The Session Description Protocol offer from the remote call party.
@@ -151,17 +119,11 @@ namespace SIPSorcery.SIP.App
         public SIPServerUserAgent(
             SIPTransport sipTransport,
             SIPEndPoint outboundProxy,
-            string sipUsername,
-            string sipDomain,
-            SIPCallDirection callDirection,
             UASInviteTransaction uasTransaction,
             ISIPAccount sipAccount)
         {
             m_sipTransport = sipTransport;
             m_outboundProxy = outboundProxy;
-            m_sipUsername = sipUsername;
-            m_sipDomain = sipDomain;
-            CallDirection = callDirection;
             m_uasTransaction = uasTransaction;
             m_sipAccount = sipAccount;
 
@@ -183,7 +145,7 @@ namespace SIPSorcery.SIP.App
             {
                 if (m_sipAccount == null)
                 {
-                    logger.LogWarning("Rejecting authentication required call for " + m_sipUsername + "@" + m_sipDomain + ", SIP account not found.");
+                    logger.LogWarning($"Rejecting authentication required call for {m_uasTransaction.TransactionRequestFrom}, SIP account not found.");
                     Reject(SIPResponseStatusCodesEnum.Forbidden, null, null);
                 }
                 else
@@ -197,11 +159,11 @@ namespace SIPSorcery.SIP.App
                     {
                         if (authenticationResult.WasAuthenticatedByIP)
                         {
-                            logger.LogDebug("New call from " + remoteEndPoint.ToString() + " successfully authenticated by IP address.");
+                            logger.LogDebug($"New call from {remoteEndPoint} successfully authenticated by IP address.");
                         }
                         else
                         {
-                            logger.LogDebug("New call from " + remoteEndPoint.ToString() + " successfully authenticated by digest.");
+                            logger.LogDebug($"New call from {remoteEndPoint} successfully authenticated by digest.");
                         }
 
                         m_isAuthenticated = true;
@@ -211,7 +173,7 @@ namespace SIPSorcery.SIP.App
                         // Send authorisation failure or required response
                         SIPResponse authReqdResponse = SIPResponse.GetResponse(sipRequest, authenticationResult.ErrorResponse, null);
                         authReqdResponse.Header.AuthenticationHeader = authenticationResult.AuthenticationRequiredHeader;
-                        logger.LogWarning("Call not authenticated for " + m_sipUsername + "@" + m_sipDomain + ", responding with " + authenticationResult.ErrorResponse + ".");
+                        logger.LogWarning($"Call not authenticated for {m_sipAccount.SIPUsername}@{m_sipAccount.SIPDomain}, responding with {authenticationResult.ErrorResponse}.");
                         m_uasTransaction.SendFinalResponse(authReqdResponse);
                     }
                 }
@@ -434,6 +396,7 @@ namespace SIPSorcery.SIP.App
         {
             Redirect(redirectCode, redirectURI, null);
         }
+        
         public void Redirect(SIPResponseStatusCodesEnum redirectCode, SIPURI redirectURI, string[] customHeaders)
         {
             try
